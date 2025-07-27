@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
-import { ethers } from 'ethers';
-import { contractAbi, contractAddress, explorerBaseUrl } from '../lib/contract';
-import { somniaTestnet } from 'wagmi/chains';
+import { explorerBaseUrl } from '../lib/contract';
 
 type LogEntry = {
   type: 'success' | 'error';
@@ -33,10 +31,9 @@ export default function HomePage() {
   const [isSending, setIsSending] = useState(false);
   const [logHistory, setLogHistory] = useState<LogEntry[]>([]);
   const [txCount, setTxCount] = useState(0);
-  
   const [isClient, setIsClient] = useState(false);
-
   const isAutoRef = useRef(isAuto);
+  
   useEffect(() => {
     isAutoRef.current = isAuto;
   }, [isAuto]);
@@ -53,41 +50,40 @@ export default function HomePage() {
 
   useEffect(() => {
     const sendTransaction = async () => {
-      if (!isAutoRef.current) return;
       if (isSending) return;
-      
       setIsSending(true);
-      const txTimestamp = getCurrentFormattedTime();
-      const botPrivateKey = process.env.PRIVATE_KEY;
 
-      if (!botPrivateKey) {
-        setLogHistory(prev => [...prev, { type: 'error', message: 'Private key tidak ditemukan', timestamp: txTimestamp }]);
-        setIsSending(false);
-        return;
-      }
+      const txTimestamp = getCurrentFormattedTime();
 
       try {
-        const provider = new ethers.JsonRpcProvider(somniaTestnet.rpcUrls.default.http[0]);
-        const wallet = new ethers.Wallet(botPrivateKey, provider);
-        const contract = new ethers.Contract(contractAddress, contractAbi, wallet);
-        const tx = await contract.logTimestamp(txTimestamp, { value: ethers.parseEther("0.001") });
-        await tx.wait();
+        const response = await fetch('/api/log-timestamp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ timestamp: txTimestamp }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Error dari API');
+        }
 
         setLogHistory(prev => [...prev, {
           type: 'success',
-          message: 'Transaksi sukses',
+          message: data.message,
           timestamp: txTimestamp,
-          hash: tx.hash
+          hash: data.hash
         }]);
-
         setTxCount(prevCount => prevCount + 1);
 
       } catch (err: any) {
-        console.error("Transaction failed:", err);
+        console.error("Gagal memanggil API:", err);
         setLogHistory(prev => [...prev, {
           type: 'error',
-          message: err.reason || 'Error tidak diketahui',
-          timestamp: getCurrentFormattedTime()
+          message: err.message || 'Error tidak diketahui',
+          timestamp: txTimestamp
         }]);
       } finally {
         setIsSending(false);
@@ -97,7 +93,7 @@ export default function HomePage() {
     const runAutoTxLoop = async () => {
       if (!isAutoRef.current) return;
       await sendTransaction();
-      const delay = getRandomDelay(1000, 3000);
+      const delay = getRandomDelay(2000, 5000);
       timeoutRef.current = setTimeout(runAutoTxLoop, delay);
     };
 
@@ -145,17 +141,14 @@ export default function HomePage() {
             </span>
           </div>
           {isSending && <p className="text-center text-yellow-400 animate-pulse">Mengirim transaksi...</p>}
-          
           <div className="mt-10">
             <div className='text-center mb-4'>
               <p className='text-brand-gray text-xl'>Total Transactions Sent: 
                 <span className='text-brand-orange text-2xl font-bold ml-2'>{txCount}</span>
               </p>
             </div>
-
             <h2 className="text-3xl text-center mb-4">Activity Logs</h2>
             <div className="flex space-x-4">
-              {/* Kolom Error Log */}
               <div className="w-1/2">
                 <h3 className="text-xl text-center text-red-500 mb-2">Error Log</h3>
                 <div className="h-48 overflow-y-auto p-2 border-2 border-red-500/50 bg-black/30 text-lg">
