@@ -93,7 +93,7 @@ export default function HomePage() {
     const runAutoTxLoop = async () => {
       if (!isAutoRef.current) return;
       await sendTransaction();
-      const delay = getRandomDelay(2000, 5000);
+      const delay = getRandomDelay(1000, 3000);
       timeoutRef.current = setTimeout(runAutoTxLoop, delay);
     };
 
