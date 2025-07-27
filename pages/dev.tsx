@@ -3,7 +3,6 @@ import Head from 'next/head';
 import { explorerBaseUrl, contractAbi, contractAddress } from '../lib/contract';
 import { createPublicClient, createWalletClient, http, parseEther, defineChain } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-
 const somniaTestnet = defineChain({
   id: 50312,
   name: 'Somnia Testnet',
@@ -36,7 +35,7 @@ const getRandomDelay = (min: number, max: number) => {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 };
 
-export default function HomePage() {
+export default function DevPage() {
   const [displayTime, setDisplayTime] = useState('00-00-0000 - 00:00:00');
   const [isAuto, setIsAuto] = useState(false);
   const [isSending, setIsSending] = useState(false);
