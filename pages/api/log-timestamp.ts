@@ -1,4 +1,4 @@
-// pages/api/log-timestamp.ts
+export const runtime = 'edge';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ethers } from 'ethers';
 import { contractAbi, contractAddress } from '../../lib/contract';
