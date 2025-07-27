@@ -1,6 +1,8 @@
+// lib/backend-config.ts
 import { defineChain } from 'viem';
-import { createConfig, http } from 'wagmi'
-import { injected } from 'wagmi/connectors'
+
+// Definisikan chain Somnia Testnet di sini.
+// Kode ini "ramping" dan aman untuk diimpor di backend.
 export const somniaTestnet = defineChain({
   id: 50312,
   name: 'Somnia Testnet',
@@ -13,14 +15,5 @@ export const somniaTestnet = defineChain({
   blockExplorers: {
     default: { name: 'Shannon Explorer', url: 'https://shannon-explorer.somnia.network/' },
   },
-})
-
-export const wagmiConfig = createConfig({
-  chains: [somniaTestnet],
-  transports: {
-    [somniaTestnet.id]: http(),
-  },
-  connectors: [
-    injected(),
-  ],
+  testnet: true,
 })

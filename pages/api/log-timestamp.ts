@@ -1,47 +1,70 @@
 export const runtime = 'edge';
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { ethers } from 'ethers';
+
+import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { contractAbi, contractAddress } from '../../lib/contract';
-import { somniaTestnet } from 'wagmi/chains';
+import { somniaTestnet } from '../../lib/backend-config'; 
 
-type ApiResponse = {
-  success: boolean;
-  message: string;
-  hash?: string;
-};
-
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<ApiResponse>
-) {
+export default async function handler(req: Request) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+    return new Response(
+      JSON.stringify({ success: false, message: 'Method Not Allowed' }),
+      { status: 405, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   const botPrivateKey = process.env.PRIVATE_KEY;
-
   if (!botPrivateKey) {
-    return res.status(500).json({ success: false, message: 'Private key tidak dikonfigurasi di server' });
-  }
-  
-  const { timestamp } = req.body;
-  if (!timestamp) {
-    return res.status(400).json({ success: false, message: 'Timestamp dibutuhkan' });
+    return new Response(
+      JSON.stringify({ success: false, message: 'Private key tidak dikonfigurasi di server' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
-    const provider = new ethers.JsonRpcProvider(somniaTestnet.rpcUrls.default.http[0]);
-    const wallet = new ethers.Wallet(botPrivateKey, provider);
-    const contract = new ethers.Contract(contractAddress, contractAbi, wallet);
+    const { timestamp } = await req.json();
+    if (!timestamp) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Timestamp dibutuhkan' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    const account = privateKeyToAccount(`0x${botPrivateKey}`);
 
-    console.log(`[API] Mengirim transaksi dengan timestamp: ${timestamp}`);
-    const tx = await contract.logTimestamp(timestamp, { value: ethers.parseEther("0.001") });
-    await tx.wait();
+    const walletClient = createWalletClient({
+      account,
+      chain: somniaTestnet,
+      transport: http(somniaTestnet.rpcUrls.default.http[0]),
+    });
+    
+    const publicClient = createPublicClient({
+      chain: somniaTestnet,
+      transport: http(somniaTestnet.rpcUrls.default.http[0]),
+    });
 
-    res.status(200).json({ success: true, message: 'Transaksi sukses', hash: tx.hash });
+    const hash = await walletClient.writeContract({
+      address: contractAddress,
+      abi: contractAbi,
+      account: account,
+      chain: somniaTestnet,
+      functionName: 'logTimestamp',
+      args: [timestamp],
+      value: parseEther('0.001'),
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash });
+
+    return new Response(
+      JSON.stringify({ success: true, message: 'Transaksi sukses', hash: hash }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
 
   } catch (err: any) {
-    console.error("[API] Transaksi Gagal:", err);
-    res.status(500).json({ success: false, message: err.reason || 'Terjadi error di server' });
+    console.error("[API EDGE] Transaksi Gagal:", err);
+    return new Response(
+      JSON.stringify({ success: false, message: err.message || 'Terjadi error di server' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }
