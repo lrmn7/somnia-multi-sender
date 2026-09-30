@@ -304,7 +304,8 @@ export const Executor: React.FC<ExecutorProps> = ({
       setRawText("");
       setTotalAmountInput("");
     } catch (err: any) {
-      // Handled in parent
+      console.error("Executor handleConfirmExecution error:", err);
+      throw err;
     } finally {
       setIsProcessing(false);
     }

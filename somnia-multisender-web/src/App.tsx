@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useAccount, useWalletClient, usePublicClient } from "wagmi";
+import { useAccount, useWalletClient, usePublicClient, useWriteContract } from "wagmi";
 import { Toaster, toast } from "sonner";
-import { parseUnits, keccak256, stringToHex } from "viem";
+import { parseUnits, keccak256, stringToHex, createPublicClient, http } from "viem";
+import { somniaTestnet } from "./config/wagmi";
 import { Navbar } from "./components/Navbar";
 import { Executor, DistributionMode } from "./components/Executor";
 import { DashboardView } from "./components/DashboardView";
@@ -78,6 +79,7 @@ export const App: React.FC = () => {
   });
 
   const { address: userAddress, isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
 
@@ -143,109 +145,179 @@ export const App: React.FC = () => {
     totalAmountStr: string;
     mode: DistributionMode;
   }) => {
-    if (!walletClient || !publicClient || !userAddress) {
+    if (!isConnected || !userAddress) {
       toast.error("Please connect your wallet first");
-      return;
+      throw new Error("Wallet not connected");
     }
+
+    const client =
+      publicClient ||
+      createPublicClient({
+        chain: somniaTestnet,
+        transport: http(),
+      });
 
     const { tokenAddress, recipients, totalAmountStr } = params;
     const multisenderAddr = config.contracts.multisender as `0x${string}`;
 
     if (!multisenderAddr || multisenderAddr === "0x0000000000000000000000000000000000000000") {
       toast.error("Multisender contract address is not configured yet on this network.");
-      return;
+      throw new Error("Multisender contract address is missing");
+    }
+
+    if (!recipients || recipients.length === 0) {
+      toast.error("No recipients specified.");
+      throw new Error("Empty recipients list");
     }
 
     // Dynamic safe chunk size: up to 173 per chunk for high safety on Somnia gas limit
     const SAFE_CHUNK_SIZE = 173;
     const chunkCount = Math.ceil(recipients.length / SAFE_CHUNK_SIZE);
-    const batchIdHex = keccak256(stringToHex(`batch-${Date.now()}-${userAddress}`, { size: 32 }));
+    
+    // Hash unique batch identifier without artificial byte limits
+    const batchIdHex = keccak256(stringToHex(`batch-${Date.now()}-${userAddress}`));
 
-    // If ERC-20 token, check allowance first
-    if (tokenAddress) {
-      const selectedToken = config.tokens.find(
-        (t) => t.address.toLowerCase() === tokenAddress.toLowerCase()
-      );
-      const decimals = selectedToken ? selectedToken.decimals : 18;
-      const totalRequiredBase = parseUnits(totalAmountStr, decimals);
+    try {
+      // If ERC-20 token, check allowance first
+      if (tokenAddress) {
+        const selectedToken = config.tokens.find(
+          (t) => t.address.toLowerCase() === tokenAddress.toLowerCase()
+        );
+        const decimals = selectedToken ? selectedToken.decimals : 18;
+        const totalRequiredBase = parseUnits(totalAmountStr, decimals);
 
-      toast.info("Checking token allowance...");
-      const currentAllowance = (await publicClient.readContract({
-        address: tokenAddress as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: "allowance",
-        args: [userAddress, multisenderAddr],
-      })) as bigint;
-
-      if (currentAllowance < totalRequiredBase) {
-        toast.loading("Awaiting allowance approval in wallet...");
-        const approveTx = await walletClient.writeContract({
+        toast.info("Checking token allowance...");
+        const currentAllowance = (await client.readContract({
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
-          functionName: "approve",
-          args: [multisenderAddr, totalRequiredBase],
-        });
-        toast.info("Approval submitted, waiting for confirmation...");
-        await publicClient.waitForTransactionReceipt({ hash: approveTx });
-        toast.success("Token allowance confirmed!");
+          functionName: "allowance",
+          args: [userAddress, multisenderAddr],
+        })) as bigint;
+
+        if (currentAllowance < totalRequiredBase) {
+          const toastId = toast.loading("Awaiting allowance approval in wallet...");
+          let approveTx: `0x${string}`;
+          if (writeContractAsync) {
+            approveTx = await writeContractAsync({
+              address: tokenAddress as `0x${string}`,
+              abi: ERC20_ABI,
+              functionName: "approve",
+              args: [multisenderAddr, totalRequiredBase],
+            });
+          } else if (walletClient) {
+            approveTx = await walletClient.writeContract({
+              address: tokenAddress as `0x${string}`,
+              abi: ERC20_ABI,
+              functionName: "approve",
+              args: [multisenderAddr, totalRequiredBase],
+            });
+          } else {
+            throw new Error("Wallet client not ready. Please reconnect wallet.");
+          }
+          toast.info("Approval submitted, waiting for confirmation...", { id: toastId });
+          await client.waitForTransactionReceipt({ hash: approveTx });
+          toast.success("Token allowance confirmed!", { id: toastId });
+        }
       }
-    }
 
-    // Execute chunk by chunk
-    for (let c = 0; c < chunkCount; c++) {
-      const slice = recipients.slice(c * SAFE_CHUNK_SIZE, (c + 1) * SAFE_CHUNK_SIZE);
-      const chunkRecipients = slice.map((r) => r.address as `0x${string}`);
-      const chunkAmounts = slice.map((r) => BigInt(r.baseUnits));
-      const chunkTotalBase = chunkAmounts.reduce((acc, cur) => acc + cur, 0n);
+      // Execute chunk by chunk
+      for (let c = 0; c < chunkCount; c++) {
+        const slice = recipients.slice(c * SAFE_CHUNK_SIZE, (c + 1) * SAFE_CHUNK_SIZE);
+        const chunkRecipients = slice.map((r) => r.address as `0x${string}`);
+        const chunkAmounts = slice.map((r) => BigInt(r.baseUnits));
+        const chunkTotalBase = chunkAmounts.reduce((acc, cur) => acc + cur, 0n);
 
-      const toastId = toast.loading(`Processing Chunk ${c + 1} of ${chunkCount} (${slice.length} recipients)...`);
+        const toastId = toast.loading(
+          `Processing Chunk ${c + 1} of ${chunkCount} (${slice.length} recipients)...`
+        );
 
-      try {
         let hash: `0x${string}`;
 
         if (!tokenAddress) {
           // Native SOMI/STT
-          hash = await walletClient.writeContract({
-            address: multisenderAddr,
-            abi: MULTISENDER_ABI,
-            functionName: "sendNative",
-            args: [chunkRecipients, chunkAmounts, batchIdHex, BigInt(c)],
-            value: chunkTotalBase,
-          });
+          if (writeContractAsync) {
+            hash = await writeContractAsync({
+              address: multisenderAddr,
+              abi: MULTISENDER_ABI,
+              functionName: "sendNative",
+              args: [chunkRecipients, chunkAmounts, batchIdHex, BigInt(c)],
+              value: chunkTotalBase,
+            });
+          } else if (walletClient) {
+            hash = await walletClient.writeContract({
+              address: multisenderAddr,
+              abi: MULTISENDER_ABI,
+              functionName: "sendNative",
+              args: [chunkRecipients, chunkAmounts, batchIdHex, BigInt(c)],
+              value: chunkTotalBase,
+            });
+          } else {
+            throw new Error("Wallet client not ready. Please reconnect wallet.");
+          }
         } else {
           // ERC-20 Token
-          hash = await walletClient.writeContract({
-            address: multisenderAddr,
-            abi: MULTISENDER_ABI,
-            functionName: "sendToken",
-            args: [
-              tokenAddress as `0x${string}`,
-              chunkRecipients,
-              chunkAmounts,
-              chunkTotalBase,
-              batchIdHex,
-              BigInt(c),
-            ],
-          });
+          if (writeContractAsync) {
+            hash = await writeContractAsync({
+              address: multisenderAddr,
+              abi: MULTISENDER_ABI,
+              functionName: "sendToken",
+              args: [
+                tokenAddress as `0x${string}`,
+                chunkRecipients,
+                chunkAmounts,
+                chunkTotalBase,
+                batchIdHex,
+                BigInt(c),
+              ],
+            });
+          } else if (walletClient) {
+            hash = await walletClient.writeContract({
+              address: multisenderAddr,
+              abi: MULTISENDER_ABI,
+              functionName: "sendToken",
+              args: [
+                tokenAddress as `0x${string}`,
+                chunkRecipients,
+                chunkAmounts,
+                chunkTotalBase,
+                batchIdHex,
+                BigInt(c),
+              ],
+            });
+          } else {
+            throw new Error("Wallet client not ready. Please reconnect wallet.");
+          }
         }
 
         toast.info(`Chunk ${c + 1} broadcasted! Waiting for block inclusion...`, { id: toastId });
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        const receipt = await client.waitForTransactionReceipt({ hash });
 
         if (receipt.status === "success") {
-          toast.success(`Chunk ${c + 1} confirmed on Somnia! (Tx: ${hash.slice(0, 10)}...)`, { id: toastId });
+          toast.success(`Chunk ${c + 1} confirmed on Somnia! (Tx: ${hash.slice(0, 10)}...)`, {
+            id: toastId,
+          });
         } else {
           toast.error(`Chunk ${c + 1} reverted on chain.`, { id: toastId });
-          throw new Error(`Chunk ${c + 1} reverted`);
+          throw new Error(`Chunk ${c + 1} reverted on chain`);
         }
-      } catch (err: any) {
-        toast.error(`Failed at Chunk ${c + 1}: ${err?.message || "Execution cancelled"}`, { id: toastId });
-        throw err;
       }
-    }
 
-    toast.success("All distribution chunks executed successfully!");
-    loadGasPool();
+      toast.success("All distribution chunks executed successfully!");
+      loadGasPool();
+    } catch (err: any) {
+      console.error("Distribution execution failed:", err);
+      const msg = err?.shortMessage || err?.message || "Execution cancelled or failed";
+      if (
+        msg.includes("User rejected") ||
+        msg.includes("User denied") ||
+        msg.includes("rejected the request")
+      ) {
+        toast.info("Transaction was cancelled in wallet.");
+      } else {
+        toast.error(`Execution failed: ${msg}`);
+      }
+      throw err;
+    }
   };
 
   return (

@@ -62,6 +62,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     setIsSubmitting(true);
     try {
       await onConfirm();
+    } catch (err) {
+      console.error("Confirm error:", err);
     } finally {
       setIsSubmitting(false);
     }
