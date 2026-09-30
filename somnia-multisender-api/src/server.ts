@@ -5,6 +5,7 @@ import { logger } from "hono/logger";
 import { bodyLimit } from "hono/body-limit";
 import crypto from "crypto";
 import { config, validateChainStartup } from "./config/index.js";
+import { runMigration } from "./db/migrate.js";
 import { configRouter } from "./routes/config.js";
 import { authRouter } from "./routes/auth.js";
 import { profileRouter } from "./routes/profile.js";
@@ -117,6 +118,13 @@ async function start() {
 
   // Validate chain startup
   await validateChainStartup();
+
+  // Ensure database tables exist
+  try {
+    await runMigration();
+  } catch (err) {
+    console.warn("[Migration Notice] Auto-migration check:", err instanceof Error ? err.message : String(err));
+  }
 
   // Start background workers
   reconcilerWorker.start();

@@ -36,7 +36,7 @@ export const somniaMainnet = defineChain({
 
 export const wagmiConfig = getDefaultConfig({
   appName: "Somnia Multisender",
-  projectId: "4f738b4d1b702ec9f2c69d7a2283e39b", // Standard WalletConnect ID for dev/demo
+  projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "da05bbd5085d4953b1f21379473058f6",
   chains: [somniaTestnet],
   ssr: false,
 });

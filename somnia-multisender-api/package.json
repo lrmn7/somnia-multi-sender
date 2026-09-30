@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "start:prod": "npm run build && node dist/server.js",
+    "db:migrate": "tsx src/db/migrate.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/**/*.test.ts"
   },
