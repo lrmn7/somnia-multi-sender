@@ -1,0 +1,29 @@
+{
+  "name": "somnia-multisender-contracts",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Production smart contracts for Somnia Multisender and Community Gas Pool",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "export-abis": "tsx scripts/export-abis.ts",
+    "deploy:testnet": "hardhat run scripts/deploy.ts --network somnia_testnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.ts --network somnia_mainnet"
+  },
+  "keywords": ["somnia", "multisender", "erc20", "somi", "smart-contracts"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-viem": "^3.0.9",
+    "@openzeppelin/contracts": "^5.2.0",
+    "@types/chai": "^5.0.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.13.1",
+    "chai": "^5.2.0",
+    "dotenv": "^16.4.7",
+    "hardhat": "^3.18.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "viem": "^2.23.4"
+  }
+}

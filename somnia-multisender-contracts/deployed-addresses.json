@@ -1,0 +1,21 @@
+{
+  "network": "Somnia Shannon Testnet",
+  "chainId": 50312,
+  "nativeSymbol": "STT",
+  "rpcUrl": "https://dream-rpc.somnia.network",
+  "deployerAddress": "0x4eCD6cd90cAc14F93841c401B85812fF6eC90eA4",
+  "multisenderAddress": "0x0d7504a6004064e4dd48ac88d8d3ba75b38dc8d0",
+  "multisenderDeployTx": "0x89a71081bf4cbc084fc1eb773f0e58e1987827fa8d8efb3d8ddae88b04bd411d",
+  "multisenderBlockNumber": 501970587,
+  "multisenderGasUsed": "16727472",
+  "gasPoolAddress": "0x89468c50ef19537abd15f497c1aa6414c0d92809",
+  "gasPoolDeployTx": "0xa0beb04b15a1aae4eb0214c67f798b1af68c6f53833f201ec84c6d828f02e88d",
+  "gasPoolBlockNumber": 501970611,
+  "gasPoolGasUsed": "12175891",
+  "relayerAddress": "0x4eCD6cd90cAc14F93841c401B85812fF6eC90eA4",
+  "mockERC20Address": "0x5cc54bb41c57f67a6e11a72e8545ab89584d89f9",
+  "mockERC20DeployTx": "0x2c3f25403b6750baf16dd0a8f3ee47daa1ecbc9210163255618c34e4936b5e5c",
+  "mockERC20BlockNumber": 501970707,
+  "mockERC20GasUsed": "7539793",
+  "deployedAt": "2026-09-30T12:19:08.395Z"
+}

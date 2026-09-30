@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <defs>
+    <style>
+      .cls-1 {
+        font-size: 200px;
+        fill: #fff;
+        text-anchor: middle;
+        font-family: "Tw Cen MT Condensed Extra Bold";
+      }
+    </style>
+  </defs>
+  <text id="_m_" data-name="{m}" class="cls-1" transform="matrix(2.877, 0, 0, 2.877, 492.808, 660.337)"><tspan x="0">{m}</tspan></text>
+</svg>
